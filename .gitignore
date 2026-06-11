@@ -1,0 +1,9 @@
+node_modules
+dist
+*.log
+.DS_Store
+
+# Ficheros .env locales (no commitear secretos); se versiona solo la plantilla
+.env
+.env.*
+!.env.example
