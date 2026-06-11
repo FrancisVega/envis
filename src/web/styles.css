@@ -673,3 +673,106 @@ select.value {
   margin: 0;
   word-break: break-all;
 }
+
+/* --- Grupos de variables -------------------------------------------------- */
+.var-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+}
+
+.group-toggle {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.group-toggle:hover {
+  color: var(--text);
+}
+
+.group-name {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  outline: none;
+  min-width: 0;
+}
+
+.group-name:focus {
+  border-color: var(--accent);
+  background: #0d0f15;
+}
+
+.group-name.muted {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.group-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.group-head.ungrouped {
+  padding: 0 2px 0 8px;
+}
+
+.group-select {
+  flex: none;
+  width: 130px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.group-select:focus {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.add-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-group .value {
+  flex: 1;
+  border-style: dashed;
+  border-color: var(--border);
+}

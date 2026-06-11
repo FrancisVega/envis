@@ -5,18 +5,14 @@
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { configDir } from "./config-dir";
 
 export interface Project {
   id: string;
   name: string;
   dir: string;
-}
-
-function configDir(): string {
-  return process.env.ENVIS_CONFIG_DIR ?? join(homedir(), ".config", "envis");
 }
 
 function configFile(): string {
@@ -46,13 +42,19 @@ export async function getProject(id: string): Promise<Project | undefined> {
   return (await load()).find((p) => p.id === id);
 }
 
+/** Construye un objeto Project a partir de un directorio. NO lo persiste. */
+export function makeProject(id: string, dir: string): Project {
+  const resolved = resolve(dir);
+  return { id, name: basename(resolved), dir: resolved };
+}
+
 /** Añade un proyecto por su directorio. Idempotente: si ya existe, lo devuelve. */
 export async function addProject(dir: string): Promise<Project> {
   const resolved = resolve(dir);
   const projects = await load();
   const existing = projects.find((p) => p.dir === resolved);
   if (existing) return existing;
-  const project: Project = { id: randomUUID(), name: basename(resolved), dir: resolved };
+  const project = makeProject(randomUUID(), resolved);
   projects.push(project);
   await save(projects);
   return project;

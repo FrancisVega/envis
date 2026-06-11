@@ -1,3 +1,5 @@
+import type { FileGroups } from "../core/groups";
+
 export interface Project {
   id: string;
   name: string;
@@ -66,6 +68,7 @@ const base = (pid: string, name: string) => `/api/projects/${pid}/files/${enc(na
 export const api = {
   projects: () => req<Project[]>("/api/projects"),
   current: () => req<Project | null>("/api/current"),
+  meta: () => req<{ isolated: boolean }>("/api/meta"),
   addProject: (dir: string) => req<Project>("/api/projects", send("POST", { dir })),
   removeProject: (id: string) => req(`/api/projects/${id}`, { method: "DELETE" }),
   browse: (path?: string) => req<BrowseResult>(`/api/browse${path ? `?path=${enc(path)}` : ""}`),
@@ -87,4 +90,8 @@ export const api = {
     req<{ name: string }>(`/api/projects/${pid}/files`, send("POST", { name, from })),
   compare: (pid: string, a: string, b: string) =>
     req<Comparison>(`/api/projects/${pid}/compare?a=${enc(a)}&b=${enc(b)}`),
+
+  groups: (pid: string, name: string) => req<FileGroups>(`${base(pid, name)}/groups`),
+  saveGroups: (pid: string, name: string, fg: FileGroups) =>
+    req<FileGroups>(`${base(pid, name)}/groups`, send("PUT", fg)),
 };

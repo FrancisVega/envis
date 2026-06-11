@@ -57,6 +57,11 @@ describe("proyectos", () => {
     const res = await app.request("/api/projects/inexistente/files");
     expect(res.status).toBe(404);
   });
+
+  it("expone metadatos de sesión (no aislado por defecto)", async () => {
+    const meta = (await (await app.request("/api/meta")).json()) as { isolated: boolean };
+    expect(meta.isolated).toBe(false);
+  });
 });
 
 describe("ficheros .env de un proyecto", () => {
@@ -162,5 +167,91 @@ describe("perfiles", () => {
     expect(r.onlyInB).toEqual(["EXTRA"]);
     expect(r.different.map((d) => d.key)).toEqual(["DEBUG"]);
     expect(r.equal).toEqual(["PORT"]);
+  });
+});
+
+describe("agrupación de variables", () => {
+  it("devuelve agrupación vacía por defecto", async () => {
+    const res = await app.request(`/api/projects/${id}/files/.env/groups`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ groups: [], assignments: {} });
+  });
+
+  it("guarda y devuelve la agrupación (roundtrip)", async () => {
+    const blob = { groups: [{ id: "g1", name: "acceso" }], assignments: { DEBUG: "g1" } };
+    const put = await app.request(`/api/projects/${id}/files/.env/groups`, {
+      ...json(blob),
+      method: "PUT",
+    });
+    expect(put.status).toBe(200);
+    const got = await (await app.request(`/api/projects/${id}/files/.env/groups`)).json();
+    expect(got).toEqual(blob);
+  });
+
+  it("descarta asignaciones a grupos inexistentes", async () => {
+    const put = await app.request(`/api/projects/${id}/files/.env/groups`, {
+      ...json({ groups: [{ id: "g1", name: "x" }], assignments: { DEBUG: "g1", PORT: "fantasma" } }),
+      method: "PUT",
+    });
+    const fg = (await put.json()) as { assignments: Record<string, string> };
+    expect(fg.assignments).toEqual({ DEBUG: "g1" });
+  });
+
+  it("rechaza grupos sin nombre", async () => {
+    const res = await app.request(`/api/projects/${id}/files/.env/groups`, {
+      ...json({ groups: [{ id: "g1", name: "  " }], assignments: {} }),
+      method: "PUT",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("404 si el proyecto no existe", async () => {
+    const res = await app.request(`/api/projects/inexistente/files/.env/groups`);
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("modo aislado (--isolated)", () => {
+  let iso: ReturnType<typeof createApp>;
+
+  beforeEach(() => {
+    iso = createApp({ currentDir: dir, isolated: true });
+  });
+
+  it("expone solo el directorio actual como único proyecto", async () => {
+    const list = (await (await iso.request("/api/projects")).json()) as { dir: string }[];
+    expect(list).toHaveLength(1);
+    expect(list[0].dir).toBe(dir);
+  });
+
+  it("/api/meta indica que está aislado", async () => {
+    const meta = (await (await iso.request("/api/meta")).json()) as { isolated: boolean };
+    expect(meta.isolated).toBe(true);
+  });
+
+  it("opera sobre los ficheros del proyecto aislado por su id", async () => {
+    const cur = (await (await iso.request("/api/current")).json()) as { id: string };
+    const res = await iso.request(`/api/projects/${cur.id}/files`);
+    expect(res.status).toBe(200);
+    const files = (await res.json()) as { name: string }[];
+    expect(files.map((f) => f.name)).toContain(".env");
+  });
+
+  it("no permite añadir ni quitar proyectos", async () => {
+    const add = await iso.request("/api/projects", json({ dir }));
+    expect(add.status).toBe(403);
+    const del = await iso.request("/api/projects/isolated", { method: "DELETE" });
+    expect(del.status).toBe(403);
+  });
+
+  it("mantiene la agrupación en memoria (sin tocar el registro)", async () => {
+    const cur = (await (await iso.request("/api/current")).json()) as { id: string };
+    const blob = { groups: [{ id: "g1", name: "acceso" }], assignments: { DEBUG: "g1" } };
+    await iso.request(`/api/projects/${cur.id}/files/.env/groups`, {
+      ...json(blob),
+      method: "PUT",
+    });
+    const got = await (await iso.request(`/api/projects/${cur.id}/files/.env/groups`)).json();
+    expect(got).toEqual(blob);
   });
 });
