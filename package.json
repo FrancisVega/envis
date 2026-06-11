@@ -1,7 +1,17 @@
 {
   "name": "@hiscovega/envis",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Pequeño dashboard web para gestionar ficheros .env: activar/desactivar, editar, perfiles y comparar.",
+  "keywords": [
+    "env",
+    "dotenv",
+    "environment-variables",
+    "cli",
+    "dashboard",
+    "dx",
+    "config"
+  ],
+  "author": "hisco",
   "type": "module",
   "bin": {
     "envis": "./dist/cli.js"
@@ -17,10 +27,14 @@
     "start": "node dist/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "prepublishOnly": "npm test && npm run build"
   },
   "engines": {
     "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT",
   "devDependencies": {
