@@ -18,7 +18,7 @@ import {
   readEnvFile,
   writeEnvFile,
 } from "./project";
-import { addProject, getProject, listProjects, removeProject } from "./registry";
+import { addProject, getProject, listProjects, makeProject, removeProject } from "./registry";
 import { browse } from "./browse";
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -52,12 +52,6 @@ class HttpError extends Error {
   }
 }
 
-async function requireProjectDir(c: Context): Promise<string> {
-  const project = await getProject(c.req.param("id") ?? "");
-  if (!project) throw new HttpError(404, "proyecto no encontrado");
-  return project.dir;
-}
-
 function requireName(c: Context): string {
   const name = c.req.param("name");
   if (!name || !isValidEnvName(name)) throw new HttpError(400, "nombre de fichero .env inválido");
@@ -67,20 +61,45 @@ function requireName(c: Context): string {
 export interface AppOptions {
   /** Directorio desde el que se lanzó envis; se auto-registra y queda activo. */
   currentDir?: string;
+  /**
+   * Modo aislado: el `currentDir` es el ÚNICO proyecto y vive en memoria.
+   * No se lee ni se escribe el registro global (`~/.config/envis`).
+   */
+  isolated?: boolean;
 }
 
 export function createApp(options: AppOptions = {}): Hono {
   const app = new Hono();
 
+  // En modo aislado el cwd es el único proyecto y no toca el registro global.
+  const isolated =
+    options.isolated && options.currentDir ? makeProject("isolated", options.currentDir) : null;
+
+  async function requireProjectDir(c: Context): Promise<string> {
+    const id = c.req.param("id") ?? "";
+    if (isolated) {
+      if (id !== isolated.id) throw new HttpError(404, "proyecto no encontrado");
+      return isolated.dir;
+    }
+    const project = await getProject(id);
+    if (!project) throw new HttpError(404, "proyecto no encontrado");
+    return project.dir;
+  }
+
   // --- Proyectos -----------------------------------------------------------
-  app.get("/api/projects", async (c) => c.json(await listProjects()));
+  app.get("/api/projects", async (c) => c.json(isolated ? [isolated] : await listProjects()));
 
   app.get("/api/current", async (c) => {
+    if (isolated) return c.json(isolated);
     if (!options.currentDir) return c.json(null);
     return c.json(await addProject(options.currentDir));
   });
 
+  // Metadatos de la sesión: el frontend oculta la gestión de proyectos si está aislado.
+  app.get("/api/meta", (c) => c.json({ isolated: isolated !== null }));
+
   app.post("/api/projects", async (c) => {
+    if (isolated) throw new HttpError(403, "modo aislado: no se pueden añadir proyectos");
     const { dir } = await c.req.json<{ dir?: string }>();
     if (typeof dir !== "string" || dir.trim() === "") throw new HttpError(400, "falta 'dir'");
     const ok = await stat(dir).then((s) => s.isDirectory(), () => false);
@@ -89,6 +108,7 @@ export function createApp(options: AppOptions = {}): Hono {
   });
 
   app.delete("/api/projects/:id", async (c) => {
+    if (isolated) throw new HttpError(403, "modo aislado: no se pueden quitar proyectos");
     await removeProject(c.req.param("id"));
     return c.json({ ok: true });
   });

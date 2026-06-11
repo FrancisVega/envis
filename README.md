@@ -33,6 +33,14 @@ cd mi-proyecto
 npx @hiscovega/envis
 ```
 
+Al ejecutarlo, el directorio actual se registra automáticamente como proyecto (si no lo estaba ya).
+
+Opciones:
+
+- `--isolated` — trabaja **solo** con el directorio actual, sin leer ni escribir el registro global
+  de proyectos. Útil para abrir un `.env` puntual sin que aparezca el resto de proyectos ni quede
+  recordado.
+
 Variables de entorno:
 
 - `ENVIS_NO_OPEN=1` — no abrir el navegador automáticamente (solo imprime la URL).

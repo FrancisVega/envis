@@ -66,6 +66,7 @@ const base = (pid: string, name: string) => `/api/projects/${pid}/files/${enc(na
 export const api = {
   projects: () => req<Project[]>("/api/projects"),
   current: () => req<Project | null>("/api/current"),
+  meta: () => req<{ isolated: boolean }>("/api/meta"),
   addProject: (dir: string) => req<Project>("/api/projects", send("POST", { dir })),
   removeProject: (id: string) => req(`/api/projects/${id}`, { method: "DELETE" }),
   browse: (path?: string) => req<BrowseResult>(`/api/browse${path ? `?path=${enc(path)}` : ""}`),

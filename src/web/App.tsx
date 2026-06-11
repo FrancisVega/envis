@@ -20,6 +20,7 @@ export function App() {
   const [vars, setVars] = useState<Var[]>([]);
   const [diff, setDiff] = useState<Diff | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isolated, setIsolated] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [newProfile, setNewProfile] = useState(false);
   const [comparing, setComparing] = useState(false);
@@ -27,9 +28,14 @@ export function App() {
   useEffect(() => {
     (async () => {
       try {
-        const [list, current] = await Promise.all([api.projects(), api.current()]);
+        const [list, current, meta] = await Promise.all([
+          api.projects(),
+          api.current(),
+          api.meta(),
+        ]);
         setProjects(list);
         setActiveProject(current ?? list[0] ?? null);
+        setIsolated(meta.isolated);
       } catch (e) {
         setError(msg(e));
       }
@@ -158,20 +164,24 @@ export function App() {
                 <span className="project-name">{p.name}</span>
                 <span className="project-dir">{p.dir}</span>
               </button>
-              <button
-                className="project-remove"
-                onClick={() => removeProject(p.id)}
-                title="quitar del registro (no borra archivos)"
-              >
-                ×
-              </button>
+              {!isolated && (
+                <button
+                  className="project-remove"
+                  onClick={() => removeProject(p.id)}
+                  title="quitar del registro (no borra archivos)"
+                >
+                  ×
+                </button>
+              )}
             </li>
           ))}
           {projects.length === 0 && <li className="empty">sin proyectos</li>}
         </ul>
-        <button className="add-project" onClick={() => setBrowsing(true)}>
-          + Añadir proyecto
-        </button>
+        {!isolated && (
+          <button className="add-project" onClick={() => setBrowsing(true)}>
+            + Añadir proyecto
+          </button>
+        )}
       </aside>
 
       <main className="panel">
