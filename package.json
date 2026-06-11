@@ -12,6 +12,12 @@
     "config"
   ],
   "author": "hisco",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FrancisVega/envis.git"
+  },
+  "homepage": "https://github.com/FrancisVega/envis#readme",
+  "bugs": "https://github.com/FrancisVega/envis/issues",
   "type": "module",
   "bin": {
     "envis": "./dist/cli.js"
