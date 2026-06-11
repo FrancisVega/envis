@@ -1,3 +1,5 @@
+import type { FileGroups } from "../core/groups";
+
 export interface Project {
   id: string;
   name: string;
@@ -88,4 +90,8 @@ export const api = {
     req<{ name: string }>(`/api/projects/${pid}/files`, send("POST", { name, from })),
   compare: (pid: string, a: string, b: string) =>
     req<Comparison>(`/api/projects/${pid}/compare?a=${enc(a)}&b=${enc(b)}`),
+
+  groups: (pid: string, name: string) => req<FileGroups>(`${base(pid, name)}/groups`),
+  saveGroups: (pid: string, name: string, fg: FileGroups) =>
+    req<FileGroups>(`${base(pid, name)}/groups`, send("PUT", fg)),
 };

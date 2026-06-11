@@ -8,9 +8,23 @@ import {
   type Project,
   type Var,
 } from "./api";
+import { groupVars, type FileGroups, type Group } from "../core/groups";
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const msg = (e: unknown) => String((e as Error)?.message ?? e);
+
+// Qué grupos están colapsados es estado de UI puro (no va al .env ni al
+// registro): vive en localStorage. Los ids de grupo son UUID globales, así que
+// un único conjunto sirve para todos los proyectos/ficheros sin colisiones.
+const COLLAPSE_KEY = "envis:collapsed";
+const loadCollapsed = (): Set<string> => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+};
+const saveCollapsed = (s: Set<string>) => localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...s]));
 
 export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -24,6 +38,8 @@ export function App() {
   const [browsing, setBrowsing] = useState(false);
   const [newProfile, setNewProfile] = useState(false);
   const [comparing, setComparing] = useState(false);
+  const [groups, setGroups] = useState<FileGroups>({ groups: [], assignments: {} });
+  const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
 
   useEffect(() => {
     (async () => {
@@ -68,9 +84,14 @@ export function App() {
   }, [activeProject, loadFiles]);
 
   const reload = useCallback(async (pid: string, name: string) => {
-    const [v, d] = await Promise.all([api.vars(pid, name), api.diff(pid, name)]);
+    const [v, d, g] = await Promise.all([
+      api.vars(pid, name),
+      api.diff(pid, name),
+      api.groups(pid, name),
+    ]);
     setVars(v.vars);
     setDiff(d);
+    setGroups(g);
   }, []);
 
   useEffect(() => {
@@ -148,6 +169,55 @@ export function App() {
       setError(msg(e));
     }
   };
+
+  // Los grupos son metadata de presentación: se guardan aparte (no en el .env)
+  // de forma optimista; si el guardado falla, recargamos el estado del servidor.
+  const persistGroups = async (pid: string, name: string, next: FileGroups) => {
+    setGroups(next);
+    try {
+      await api.saveGroups(pid, name, next);
+    } catch (e) {
+      setError(msg(e));
+      api.groups(pid, name).then(setGroups).catch(() => {});
+    }
+  };
+
+  const mutateGroups = (next: FileGroups) => {
+    if (activeProject && active) persistGroups(activeProject.id, active, next);
+  };
+
+  const addGroup = (name: string) =>
+    mutateGroups({ ...groups, groups: [...groups.groups, { id: crypto.randomUUID(), name }] });
+
+  const renameGroup = (id: string, name: string) =>
+    mutateGroups({
+      ...groups,
+      groups: groups.groups.map((g) => (g.id === id ? { ...g, name } : g)),
+    });
+
+  const deleteGroup = (id: string) =>
+    mutateGroups({
+      groups: groups.groups.filter((g) => g.id !== id),
+      assignments: Object.fromEntries(
+        Object.entries(groups.assignments).filter(([, gid]) => gid !== id),
+      ),
+    });
+
+  const assignVar = (key: string, id: string | null) => {
+    const assignments = { ...groups.assignments };
+    if (id) assignments[key] = id;
+    else delete assignments[key];
+    mutateGroups({ ...groups, assignments });
+  };
+
+  const toggleCollapse = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      saveCollapsed(next);
+      return next;
+    });
 
   const enabledCount = vars.filter((v) => v.enabled).length;
 
@@ -255,18 +325,20 @@ export function App() {
                   </div>
                 )}
 
-                <ul className="vars">
-                  {vars.map((v) => (
-                    <VarRow
-                      key={v.line}
-                      v={v}
-                      onToggle={() => run(() => api.toggle(activeProject.id, active, v.line))}
-                      onSave={(value) => run(() => api.setValue(activeProject.id, active, v.line, value))}
-                      onRemove={() => run(() => api.remove(activeProject.id, active, v.line))}
-                    />
-                  ))}
-                  <AddRow onAdd={(k, val) => run(() => api.add(activeProject.id, active, k, val))} />
-                </ul>
+                <VarList
+                  vars={vars}
+                  groups={groups}
+                  collapsed={collapsed}
+                  onToggleCollapse={toggleCollapse}
+                  onToggle={(line) => run(() => api.toggle(activeProject.id, active, line))}
+                  onSave={(line, value) => run(() => api.setValue(activeProject.id, active, line, value))}
+                  onRemove={(line) => run(() => api.remove(activeProject.id, active, line))}
+                  onAdd={(k, val) => run(() => api.add(activeProject.id, active, k, val))}
+                  onAssign={assignVar}
+                  onAddGroup={addGroup}
+                  onRenameGroup={renameGroup}
+                  onDeleteGroup={deleteGroup}
+                />
               </>
             )}
           </>
@@ -527,14 +599,20 @@ function CompareModal({
 
 function VarRow({
   v,
+  groups,
+  groupId,
   onToggle,
   onSave,
   onRemove,
+  onAssign,
 }: {
   v: Var;
+  groups: Group[];
+  groupId: string | null;
   onToggle: () => void;
   onSave: (value: string) => void;
   onRemove: () => void;
+  onAssign: (groupId: string | null) => void;
 }) {
   const [draft, setDraft] = useState(v.value);
   useEffect(() => setDraft(v.value), [v.value]);
@@ -561,10 +639,194 @@ function VarRow({
         }}
         spellCheck={false}
       />
+      {groups.length > 0 && (
+        <select
+          className="group-select"
+          value={groupId ?? ""}
+          onChange={(e) => onAssign(e.target.value || null)}
+          title="grupo"
+        >
+          <option value="">—</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+      )}
       <button className="remove" onClick={onRemove} aria-label="eliminar">
         ×
       </button>
     </li>
+  );
+}
+
+function VarList({
+  vars,
+  groups,
+  collapsed,
+  onToggleCollapse,
+  onToggle,
+  onSave,
+  onRemove,
+  onAdd,
+  onAssign,
+  onAddGroup,
+  onRenameGroup,
+  onDeleteGroup,
+}: {
+  vars: Var[];
+  groups: FileGroups;
+  collapsed: Set<string>;
+  onToggleCollapse: (id: string) => void;
+  onToggle: (line: number) => void;
+  onSave: (line: number, value: string) => void;
+  onRemove: (line: number) => void;
+  onAdd: (key: string, value: string) => void;
+  onAssign: (key: string, groupId: string | null) => void;
+  onAddGroup: (name: string) => void;
+  onRenameGroup: (id: string, name: string) => void;
+  onDeleteGroup: (id: string) => void;
+}) {
+  const sections = groupVars(vars, groups);
+  const hasGroups = groups.groups.length > 0;
+  const ungrouped = sections.find((s) => !s.group)?.vars ?? [];
+
+  const rows = (list: Var[]) =>
+    list.map((v) => (
+      <VarRow
+        key={v.line}
+        v={v}
+        groups={hasGroups ? groups.groups : []}
+        groupId={groups.assignments[v.key] ?? null}
+        onToggle={() => onToggle(v.line)}
+        onSave={(value) => onSave(v.line, value)}
+        onRemove={() => onRemove(v.line)}
+        onAssign={(gid) => onAssign(v.key, gid)}
+      />
+    ));
+
+  return (
+    <div className="var-groups">
+      {sections
+        .filter((s) => s.group)
+        .map((s) => {
+          const g = s.group!;
+          const isCollapsed = collapsed.has(g.id);
+          return (
+            <section className="group" key={g.id}>
+              <GroupHeader
+                group={g}
+                count={s.vars.length}
+                collapsed={isCollapsed}
+                onToggle={() => onToggleCollapse(g.id)}
+                onRename={(name) => onRenameGroup(g.id, name)}
+                onDelete={() => onDeleteGroup(g.id)}
+              />
+              {!isCollapsed && (
+                <ul className="vars">
+                  {s.vars.length ? rows(s.vars) : <li className="empty">— sin variables —</li>}
+                </ul>
+              )}
+            </section>
+          );
+        })}
+
+      <section className="group">
+        {hasGroups && ungrouped.length > 0 && (
+          <div className="group-head ungrouped">
+            <span className="group-name muted">Sin agrupar</span>
+          </div>
+        )}
+        <ul className="vars">
+          {rows(ungrouped)}
+          <AddRow onAdd={onAdd} />
+        </ul>
+      </section>
+
+      <AddGroup onAdd={onAddGroup} />
+    </div>
+  );
+}
+
+function GroupHeader({
+  group,
+  count,
+  collapsed,
+  onToggle,
+  onRename,
+  onDelete,
+}: {
+  group: Group;
+  count: number;
+  collapsed: boolean;
+  onToggle: () => void;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+}) {
+  const [name, setName] = useState(group.name);
+  useEffect(() => setName(group.name), [group.name]);
+
+  return (
+    <div className="group-head">
+      <button
+        className="group-toggle"
+        onClick={onToggle}
+        aria-label={collapsed ? "expandir" : "colapsar"}
+      >
+        {collapsed ? "▸" : "▾"}
+      </button>
+      <input
+        className="group-name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={() => {
+          const n = name.trim();
+          if (n && n !== group.name) onRename(n);
+          else setName(group.name);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") setName(group.name);
+        }}
+        spellCheck={false}
+      />
+      <span className="group-count">{count}</span>
+      <button
+        className="remove"
+        onClick={onDelete}
+        aria-label="borrar grupo"
+        title="borrar grupo (sus variables vuelven a «Sin agrupar»)"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function AddGroup({ onAdd }: { onAdd: (name: string) => void }) {
+  const [name, setName] = useState("");
+  const submit = () => {
+    const n = name.trim();
+    if (!n) return;
+    onAdd(n);
+    setName("");
+  };
+
+  return (
+    <div className="add-group">
+      <input
+        className="value"
+        placeholder="+ nuevo grupo"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && submit()}
+        spellCheck={false}
+      />
+      <button className="add-btn" onClick={submit} disabled={!name.trim()} aria-label="crear grupo">
+        +
+      </button>
+    </div>
   );
 }
 

@@ -170,6 +170,47 @@ describe("perfiles", () => {
   });
 });
 
+describe("agrupación de variables", () => {
+  it("devuelve agrupación vacía por defecto", async () => {
+    const res = await app.request(`/api/projects/${id}/files/.env/groups`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ groups: [], assignments: {} });
+  });
+
+  it("guarda y devuelve la agrupación (roundtrip)", async () => {
+    const blob = { groups: [{ id: "g1", name: "acceso" }], assignments: { DEBUG: "g1" } };
+    const put = await app.request(`/api/projects/${id}/files/.env/groups`, {
+      ...json(blob),
+      method: "PUT",
+    });
+    expect(put.status).toBe(200);
+    const got = await (await app.request(`/api/projects/${id}/files/.env/groups`)).json();
+    expect(got).toEqual(blob);
+  });
+
+  it("descarta asignaciones a grupos inexistentes", async () => {
+    const put = await app.request(`/api/projects/${id}/files/.env/groups`, {
+      ...json({ groups: [{ id: "g1", name: "x" }], assignments: { DEBUG: "g1", PORT: "fantasma" } }),
+      method: "PUT",
+    });
+    const fg = (await put.json()) as { assignments: Record<string, string> };
+    expect(fg.assignments).toEqual({ DEBUG: "g1" });
+  });
+
+  it("rechaza grupos sin nombre", async () => {
+    const res = await app.request(`/api/projects/${id}/files/.env/groups`, {
+      ...json({ groups: [{ id: "g1", name: "  " }], assignments: {} }),
+      method: "PUT",
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("404 si el proyecto no existe", async () => {
+    const res = await app.request(`/api/projects/inexistente/files/.env/groups`);
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("modo aislado (--isolated)", () => {
   let iso: ReturnType<typeof createApp>;
 
@@ -201,5 +242,16 @@ describe("modo aislado (--isolated)", () => {
     expect(add.status).toBe(403);
     const del = await iso.request("/api/projects/isolated", { method: "DELETE" });
     expect(del.status).toBe(403);
+  });
+
+  it("mantiene la agrupación en memoria (sin tocar el registro)", async () => {
+    const cur = (await (await iso.request("/api/current")).json()) as { id: string };
+    const blob = { groups: [{ id: "g1", name: "acceso" }], assignments: { DEBUG: "g1" } };
+    await iso.request(`/api/projects/${cur.id}/files/.env/groups`, {
+      ...json(blob),
+      method: "PUT",
+    });
+    const got = await (await iso.request(`/api/projects/${cur.id}/files/.env/groups`)).json();
+    expect(got).toEqual(blob);
   });
 });

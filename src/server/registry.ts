@@ -5,18 +5,14 @@
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { configDir } from "./config-dir";
 
 export interface Project {
   id: string;
   name: string;
   dir: string;
-}
-
-function configDir(): string {
-  return process.env.ENVIS_CONFIG_DIR ?? join(homedir(), ".config", "envis");
 }
 
 function configFile(): string {

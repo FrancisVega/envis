@@ -19,7 +19,9 @@ import {
   writeEnvFile,
 } from "./project";
 import { addProject, getProject, listProjects, makeProject, removeProject } from "./registry";
+import { readGroups, writeGroups } from "./groups";
 import { browse } from "./browse";
+import type { FileGroups, Group } from "../core/groups";
 
 const KEY_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -58,6 +60,35 @@ function requireName(c: Context): string {
   return name;
 }
 
+/**
+ * Valida y normaliza el cuerpo de `PUT …/groups`. Es estricto con `groups`
+ * (estructura e ids únicos) y tolerante con `assignments`: descarta las que
+ * apuntan a un grupo inexistente, igual que hace la reconciliación al pintar.
+ */
+function parseFileGroups(body: unknown): FileGroups {
+  if (!body || typeof body !== "object") throw new HttpError(400, "cuerpo inválido");
+  const { groups, assignments } = body as { groups?: unknown; assignments?: unknown };
+  if (!Array.isArray(groups)) throw new HttpError(400, "'groups' debe ser un array");
+  const ids = new Set<string>();
+  const cleanGroups: Group[] = groups.map((g) => {
+    if (!g || typeof g !== "object") throw new HttpError(400, "grupo inválido");
+    const { id, name } = g as { id?: unknown; name?: unknown };
+    if (typeof id !== "string" || id === "") throw new HttpError(400, "id de grupo inválido");
+    if (typeof name !== "string" || name.trim() === "")
+      throw new HttpError(400, "nombre de grupo inválido");
+    if (ids.has(id)) throw new HttpError(400, "ids de grupo duplicados");
+    ids.add(id);
+    return { id, name };
+  });
+  const cleanAssignments: Record<string, string> = {};
+  if (assignments && typeof assignments === "object") {
+    for (const [key, gid] of Object.entries(assignments as Record<string, unknown>)) {
+      if (typeof gid === "string" && ids.has(gid)) cleanAssignments[key] = gid;
+    }
+  }
+  return { groups: cleanGroups, assignments: cleanAssignments };
+}
+
 export interface AppOptions {
   /** Directorio desde el que se lanzó envis; se auto-registra y queda activo. */
   currentDir?: string;
@@ -84,6 +115,20 @@ export function createApp(options: AppOptions = {}): Hono {
     const project = await getProject(id);
     if (!project) throw new HttpError(404, "proyecto no encontrado");
     return project.dir;
+  }
+
+  // Agrupación de variables: metadata de presentación, fuera del .env. En modo
+  // aislado vive en memoria (coherente con que el proyecto no toca el registro).
+  const isolatedGroups = new Map<string, FileGroups>();
+
+  function getGroups(id: string, file: string): Promise<FileGroups> {
+    if (isolated) return Promise.resolve(isolatedGroups.get(file) ?? { groups: [], assignments: {} });
+    return readGroups(id, file);
+  }
+
+  async function putGroups(id: string, file: string, fg: FileGroups): Promise<void> {
+    if (isolated) isolatedGroups.set(file, fg);
+    else await writeGroups(id, file, fg);
   }
 
   // --- Proyectos -----------------------------------------------------------
@@ -215,6 +260,21 @@ export function createApp(options: AppOptions = {}): Hono {
     env.remove(line);
     await writeEnvFile(dir, name, env);
     return c.json({ line });
+  });
+
+  // --- Agrupación de variables (solo presentación, fuera del .env) ---------
+  app.get("/api/projects/:id/files/:name/groups", async (c) => {
+    await requireProjectDir(c);
+    const name = requireName(c);
+    return c.json(await getGroups(c.req.param("id") ?? "", name));
+  });
+
+  app.put("/api/projects/:id/files/:name/groups", async (c) => {
+    await requireProjectDir(c);
+    const name = requireName(c);
+    const fg = parseFileGroups(await c.req.json());
+    await putGroups(c.req.param("id") ?? "", name, fg);
+    return c.json(fg);
   });
 
   app.onError((err, c) => {
