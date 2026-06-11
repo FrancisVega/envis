@@ -1,6 +1,6 @@
 {
   "name": "@hiscovega/envis",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pequeño dashboard web para gestionar ficheros .env: activar/desactivar, editar, perfiles y comparar.",
   "keywords": [
     "env",
@@ -20,7 +20,7 @@
   "bugs": "https://github.com/FrancisVega/envis/issues",
   "type": "module",
   "bin": {
-    "envis": "./dist/cli.js"
+    "envis": "dist/cli.js"
   },
   "files": [
     "dist"
