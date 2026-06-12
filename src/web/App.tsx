@@ -50,7 +50,11 @@ export function App() {
           api.meta(),
         ]);
         setProjects(list);
-        setActiveProject(current ?? list[0] ?? null);
+        // El daemon es multi-proyecto: cada `envis <carpeta>` abre el navegador
+        // en su proyecto vía `?project=<id>`, que prevalece sobre el current.
+        const wanted = new URLSearchParams(window.location.search).get("project");
+        const fromUrl = wanted ? list.find((p) => p.id === wanted) : undefined;
+        setActiveProject(fromUrl ?? current ?? list[0] ?? null);
         setIsolated(meta.isolated);
       } catch (e) {
         setError(msg(e));

@@ -1,6 +1,6 @@
 {
   "name": "@hiscovega/envis",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Pequeño dashboard web para gestionar ficheros .env: activar/desactivar, editar, perfiles y comparar.",
   "keywords": [
     "env",

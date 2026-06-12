@@ -7,8 +7,9 @@ navegador y administras las variables de entorno con un par de clics — sin edi
 npx @hiscovega/envis
 ```
 
-Levanta un servidor local en `127.0.0.1`, abre el navegador y opera sobre los `.env` del directorio
-donde lo ejecutes.
+Levanta un servidor local en `127.0.0.1` **en segundo plano** (un único daemon que sirve todos tus
+proyectos), abre el navegador y te devuelve el terminal. Opera sobre los `.env` del directorio donde
+lo ejecutes.
 
 ## Qué hace
 
@@ -35,15 +36,23 @@ npx @hiscovega/envis
 
 Al ejecutarlo, el directorio actual se registra automáticamente como proyecto (si no lo estaba ya).
 
+El servidor corre como un **daemon en segundo plano**, así que el terminal queda libre al instante. Un
+único daemon sirve todos tus proyectos: volver a ejecutar `envis` en otra carpeta solo la registra y
+abre el navegador apuntando a ese proyecto.
+
+- `envis status` — indica si el daemon está activo y en qué URL.
+- `envis stop` — detiene el daemon.
+
 Opciones:
 
 - `--isolated` — trabaja **solo** con el directorio actual, sin leer ni escribir el registro global
-  de proyectos. Útil para abrir un `.env` puntual sin que aparezca el resto de proyectos ni quede
-  recordado.
+  de proyectos (server efímero, sin daemon). Útil para abrir un `.env` puntual sin que aparezca el
+  resto de proyectos ni quede recordado.
 
 Variables de entorno:
 
 - `ENVIS_NO_OPEN=1` — no abrir el navegador automáticamente (solo imprime la URL).
+- `ENVIS_PORT` — puerto del daemon (por defecto `5180`).
 
 ## Desarrollo
 
