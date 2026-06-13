@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import open from "open";
 import { createApp, type AppOptions } from "./server/app";
 import { addProject } from "./server/registry";
+import { listEnvFiles } from "./server/project";
 import { clearState, daemonPort, daemonStatus, ensureDaemon, stopDaemon, writeState } from "./server/daemon";
 
 const cliPath = fileURLToPath(import.meta.url);
@@ -59,13 +60,20 @@ function runDaemon(): void {
 
 // Modo cliente (por defecto): registra el cwd, asegura el daemon y abre el
 // navegador en ese proyecto. Devuelve el prompt sin bloquear el terminal.
+// El cwd solo se registra si tiene ficheros .env; si no, envis se abre en modo
+// global (sin añadir este directorio) para gestionar el resto del registro.
 async function runClient(): Promise<void> {
-  const project = await addProject(process.cwd());
+  const dir = process.cwd();
+  const hasEnv = (await listEnvFiles(dir)).length > 0;
+  const project = hasEnv ? await addProject(dir) : null;
   try {
     const { port, started } = await ensureDaemon(cliPath);
-    const url = `http://127.0.0.1:${port}/?project=${project.id}`;
-    console.log(`\n  ${green("▍envis")}  ${project.dir}`);
-    console.log(`  ${dim(url)} ${dim(started ? "(daemon arrancado)" : "(daemon activo)")}\n`);
+    const base = `http://127.0.0.1:${port}/`;
+    const url = project ? `${base}?project=${project.id}` : base;
+    const note = dim(started ? "(daemon arrancado)" : "(daemon activo)");
+    const label = project ? project.dir : `${dir} ${dim("(sin .env, no registrado)")}`;
+    console.log(`\n  ${green("▍envis")}  ${label}`);
+    console.log(`  ${dim(url)} ${note}\n`);
     if (!noOpen) void open(url).catch(() => {});
   } catch (e) {
     console.error(`\n  ${(e as Error).message}\n`);

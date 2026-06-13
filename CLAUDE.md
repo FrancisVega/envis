@@ -35,14 +35,15 @@ JS+CSS inline); el CLI lo lee y lo sirve para toda ruta no-`/api`. Se publica so
   identifican por **número de línea**, no por clave (una clave puede estar activa y comentada a la vez).
   El toggle manipula el prefijo `#` preservando el resto de la línea.
 - **API por proyecto**: las rutas de ficheros son `/api/projects/:id/files/...`; el directorio se
-  resuelve por `:id` desde el registro. El cwd se auto-registra al arrancar el CLI (`cli.ts`) y, como
-  respaldo, vía `GET /api/current`.
+  resuelve por `:id` desde el registro. El cwd se auto-registra al arrancar el CLI (`cli.ts`, solo si
+  tiene `.env*`) y, como respaldo, vía `GET /api/current`.
 - **Modo daemon (por defecto)**: `envis` arranca UN server persistente en background (detached) que
   sirve todo el registro; el terminal queda libre. El cliente lo detecta por health-check a `/api/meta`
   y lo levanta si no responde. Estado (`{pid,port}`) en `~/.config/envis/daemon.json`, logs en
-  `daemon.log`; puerto fijo `ENVIS_PORT` (def. `5180`). Cada `envis <dir>` registra el cwd y abre el
-  navegador en `?project=<id>`, que el frontend prioriza sobre `/api/current`. El daemon corre sin
-  `currentDir` (neutral); `envis stop` / `status` lo controlan.
+  `daemon.log`; puerto fijo `ENVIS_PORT` (def. `5180`). `envis <dir>` registra el cwd **solo si tiene
+  ficheros `.env*`** y abre el navegador en `?project=<id>` (que el frontend prioriza sobre
+  `/api/current`); si no hay ningún `.env*`, NO se registra y se abre en modo global para gestionar el
+  resto del registro. El daemon corre sin `currentDir` (neutral); `envis stop` / `status` lo controlan.
 - **Modo aislado (`--isolated`)**: el cwd es el ÚNICO proyecto y vive en memoria (`makeProject` con id
   fijo `"isolated"`); NO se lee ni escribe el registro. `createApp({ isolated })` filtra `/api/projects`
   y `requireProjectDir`, y `POST/DELETE /api/projects` responden 403. El frontend lee `GET /api/meta`
